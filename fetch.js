@@ -1,0 +1,1 @@
+const https = require(" https\); const fs = require(\fs\); https.get(\https://raw.githubusercontent.com/alperen-dev/turkey-geojson/master/turkey.json\, (res) => { let data = \\; res.on(\data\, chunk => data += chunk); res.on(\end\, () => { fs.writeFileSync(\assets/map/turkey.json\, data); console.log(\Done size:\, data.length); }); });

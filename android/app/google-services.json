@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "736231834800",
+    "project_id": "turkey-city",
+    "storage_bucket": "turkey-city.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:736231834800:android:8c981799f1a7e38ccb6775",
+        "android_client_info": {
+          "package_name": "com.turkiye.kesif.turkiye_kesif_haritasi"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "736231834800-o912uhdh19r5ttvdr7dn6m3bsajnqjoo.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-4f4mCHlX5P2bdm7m-sxmOZO8JckEqVc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "736231834800-o912uhdh19r5ttvdr7dn6m3bsajnqjoo.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
