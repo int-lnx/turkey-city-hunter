@@ -22,6 +22,8 @@ class CityItem {
   String id;
   String name;
   String note;
+  String description;
+  String imageUrl;
   bool isChecked;
   ItemImportance importance;
   List<CityItem> subItems;
@@ -30,6 +32,8 @@ class CityItem {
     required this.id,
     required this.name,
     this.note = '',
+    this.description = '',
+    this.imageUrl = '',
     this.isChecked = false,
     this.importance = ItemImportance.ordinary,
     List<CityItem>? subItems,
@@ -65,6 +69,8 @@ class CityItem {
     String? id,
     String? name,
     String? note,
+    String? description,
+    String? imageUrl,
     bool? isChecked,
     ItemImportance? importance,
     List<CityItem>? subItems,
@@ -73,6 +79,8 @@ class CityItem {
       id: id ?? this.id,
       name: name ?? this.name,
       note: note ?? this.note,
+      description: description ?? this.description,
+      imageUrl: imageUrl ?? this.imageUrl,
       isChecked: isChecked ?? this.isChecked,
       importance: importance ?? this.importance,
       subItems: subItems ?? this.subItems,
@@ -83,6 +91,8 @@ class CityItem {
         'id': id,
         'name': name,
         'note': note,
+        'description': description,
+        'imageUrl': imageUrl,
         'isChecked': isChecked,
         'importance': importance.name,
         'subItems': subItems.map((s) => s.toJson()).toList(),
@@ -92,6 +102,8 @@ class CityItem {
         id: json['id'] as String,
         name: json['name'] as String,
         note: (json['note'] as String?) ?? '',
+        description: (json['description'] as String?) ?? '',
+        imageUrl: (json['imageUrl'] as String?) ?? '',
         isChecked: json['isChecked'] as bool? ?? false,
         importance: ItemImportance.fromName(json['importance'] as String?),
         subItems: (json['subItems'] as List<dynamic>? ?? [])
@@ -99,3 +111,4 @@ class CityItem {
             .toList(),
       );
 }
+

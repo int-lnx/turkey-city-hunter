@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/city_provider.dart';
 import '../services/auth_service.dart';
+import '../services/admin_service.dart';
+import '../screens/admin_dashboard_screen.dart';
+import '../utils/file_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -80,17 +83,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
-                    child: Text(
-                      currentUser.isNotEmpty ? currentUser[0].toUpperCase() : 'U',
-                      style: const TextStyle(
-                        color: Color(0xFF8B5CF6),
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold,
+                  Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
+                        backgroundImage: (provider.isLoggedIn &&
+                                provider.firebaseUser?.photoURL != null &&
+                                provider.firebaseUser!.photoURL!.isNotEmpty)
+                            ? NetworkImage(provider.firebaseUser!.photoURL!)
+                            : null,
+                        child: (provider.isLoggedIn &&
+                                provider.firebaseUser?.photoURL != null &&
+                                provider.firebaseUser!.photoURL!.isNotEmpty)
+                            ? null
+                            : Text(
+                                currentUser.isNotEmpty ? currentUser[0].toUpperCase() : 'U',
+                                style: const TextStyle(
+                                  color: Color(0xFF8B5CF6),
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                       ),
-                    ),
+                      if (provider.isLoggedIn)
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF10B981),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.check, size: 14, color: Colors.white),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -102,10 +128,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Aktif Gezgin Profili',
-                    style: TextStyle(color: Colors.white54, fontSize: 13),
-                  ),
+                  if (provider.isLoggedIn && provider.firebaseUser?.email != null) ...[
+                    Container(
+                      margin: const EdgeInsets.only(top: 4, bottom: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.account_circle, color: Color(0xFF60A5FA), size: 16),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              provider.firebaseUser!.email!,
+                              style: const TextStyle(
+                                color: Color(0xFF93C5FD),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Google ile Bağlı Hesap',
+                      style: TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ] else ...[
+                    const Text(
+                      'Aktif Gezgin Profili (Misafir)',
+                      style: TextStyle(color: Colors.white54, fontSize: 13),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   const Divider(color: Colors.white12),
                   const SizedBox(height: 12),
@@ -168,7 +229,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                   const SizedBox(height: 14),
-                  if (provider.isLoggedIn)
+                  if (provider.isLoggedIn) ...[
+                    FutureBuilder<bool>(
+                      future: AdminService().isCurrentUserAdmin(),
+                      builder: (ctx, snapshot) {
+                        if (snapshot.data == true) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const AdminDashboardScreen(),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white, size: 18),
+                                label: const Text('Yönetim Paneline Git', style: TextStyle(fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFEF4444),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -188,7 +280,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
-                    )
+                    ),
+                  ]
                   else
                     SizedBox(
                       width: double.infinity,
@@ -339,6 +432,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 24),
 
+            // Harita Verisi Paylaş / Yedekle (Export & Import) Section
+            const Text(
+              'Harita Verisi (Dışa / İçe Aktar)',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF16213E),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Aktif harita verilerinizi JSON formatında dışa aktarabilir veya başka bir hesaptan/cihazdan aldığınız verileri yeni bir harita olarak içeri aktarabilirsiniz.',
+                    style: TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      // Export Button
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _handleExportMap(context, provider),
+                          icon: const Icon(Icons.file_download_outlined, size: 20),
+                          label: const Text('Dışa Aktar'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0EA5E9),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Import Button
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _showImportOptionsDialog(context, provider),
+                          icon: const Icon(Icons.file_upload_outlined, size: 20),
+                          label: const Text('İçe Aktar'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF10B981),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
             // User Profile Switcher List
             const Text(
               'Diğer Kullanıcı Profilleri',
@@ -406,4 +559,239 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ],
     );
   }
+
+  // ── Data Export & Import Handlers ──────────────────────────────────────────
+
+  Future<void> _handleExportMap(BuildContext context, CityProvider provider) async {
+    final jsonStr = provider.exportMapData();
+    final sanitizedName = provider.currentUser.replaceAll(RegExp(r'[^a-zA-Z0-9_\u00C0-\u017F]'), '_');
+    final fileName = 'kesif_haritasi_${sanitizedName}_${DateTime.now().millisecondsSinceEpoch}.json';
+
+    await FileHelper.downloadJsonFile(
+      jsonContent: jsonStr,
+      fileName: fileName,
+    );
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('Harita verisi indirildi: $fileName'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showImportOptionsDialog(BuildContext context, CityProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF16213E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Row(
+          children: [
+            Icon(Icons.file_upload_outlined, color: Color(0xFF10B981), size: 24),
+            SizedBox(width: 8),
+            Text(
+              'Harita Verisi İçe Aktar',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'İçe aktarılan veriler her zaman yeni bir harita/profil olarak oluşturulur. Mevcut haritanız asla bozulmaz veya üzerine yazılmaz.',
+              style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              tileColor: Colors.white.withValues(alpha: 0.05),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              leading: const Icon(Icons.folder_open_outlined, color: Color(0xFF38BDF8)),
+              title: const Text('JSON Dosyasından Yükle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Bilgisayarınızdan .json dosyası seçin', style: TextStyle(color: Colors.white54, fontSize: 11)),
+              trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white38, size: 14),
+              onTap: () async {
+                Navigator.of(ctx).pop();
+                await _handlePickFileAndImport(context, provider);
+              },
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              tileColor: Colors.white.withValues(alpha: 0.05),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              leading: const Icon(Icons.paste_outlined, color: Color(0xFFA78BFA)),
+              title: const Text('Metin Olarak Yapıştır', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              subtitle: const Text('JSON kodunu doğrudan yapıştırarak aktarın', style: TextStyle(color: Colors.white54, fontSize: 11)),
+              trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white38, size: 14),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _showPasteJsonDialog(context, provider);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Vazgeç', style: TextStyle(color: Colors.white60)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handlePickFileAndImport(BuildContext context, CityProvider provider) async {
+    try {
+      final jsonContent = await FileHelper.pickJsonFile();
+      if (jsonContent == null || jsonContent.trim().isEmpty) return;
+
+      final newMapName = await provider.importMapData(jsonContent);
+      _nameController.text = newMapName;
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Harita başarıyla "$newMapName" adıyla içe aktarıldı!'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          content: Text('İçe aktarma hatası: $e'),
+        ),
+      );
+    }
+  }
+
+  void _showPasteJsonDialog(BuildContext context, CityProvider provider) {
+    final textCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF16213E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text(
+          'JSON Verisini Yapıştır',
+          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        content: SizedBox(
+          width: 450,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Yeni Harita Adı (Opsiyonel)',
+                  labelStyle: const TextStyle(color: Colors.white54),
+                  hintText: 'Örn: Arkadaşımın Haritası',
+                  hintStyle: const TextStyle(color: Colors.white30),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.05),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textCtrl,
+                maxLines: 8,
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace'),
+                decoration: InputDecoration(
+                  hintText: 'Buraya JSON içeriğini yapıştırın...',
+                  hintStyle: const TextStyle(color: Colors.white30),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.05),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Vazgeç', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final content = textCtrl.text.trim();
+              if (content.isEmpty) return;
+
+              try {
+                Navigator.of(ctx).pop();
+                final customName = nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : null;
+                final newMapName = await provider.importMapData(content, customMapName: customName);
+                _nameController.text = newMapName;
+
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: const Color(0xFF10B981),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    content: Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text('Harita başarıyla "$newMapName" adıyla eklendi!'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: Colors.redAccent,
+                    behavior: SnackBarBehavior.floating,
+                    content: Text('Hatalı veri formatı: $e'),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('İçe Aktar'),
+          ),
+        ],
+      ),
+    );
+  }
 }
+

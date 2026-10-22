@@ -26,7 +26,9 @@ double get _mapAspect => (_kLonSpan * _kCosLat) / _kLatSpan;
 // ── TurkeyMapWidget ──────────────────────────────────────────────────────────
 
 class TurkeyMapWidget extends StatefulWidget {
-  const TurkeyMapWidget({super.key});
+  final void Function(String cityId, String cityName)? onCityTap;
+
+  const TurkeyMapWidget({super.key, this.onCityTap});
 
   @override
   State<TurkeyMapWidget> createState() => _TurkeyMapWidgetState();
@@ -148,16 +150,20 @@ class _TurkeyMapWidgetState extends State<TurkeyMapWidget> {
                         final plate = _hitTestPlate(details.localPosition, size);
                         if (plate != null) {
                           final plateStr = plate.toString().padLeft(2, '0');
-                          showModalBottomSheet(
-                            context: context,
-                            isScrollControlled: true,
-                            backgroundColor: Colors.transparent,
-                            builder: (_) => CityPopup(
-                              cityId: plateStr,
-                              cityName:
-                                  TurkeyGridData.cityNames[plateStr] ?? plateStr,
-                            ),
-                          );
+                          final cityName = TurkeyGridData.cityNames[plateStr] ?? plateStr;
+                          if (widget.onCityTap != null) {
+                            widget.onCityTap!(plateStr, cityName);
+                          } else {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.transparent,
+                              builder: (_) => CityPopup(
+                                cityId: plateStr,
+                                cityName: cityName,
+                              ),
+                            );
+                          }
                         }
                       },
                       onTap: () {},

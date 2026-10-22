@@ -3,10 +3,14 @@ import 'package:provider/provider.dart';
 import '../models/city_item.dart';
 import '../providers/city_provider.dart';
 import '../widgets/turkey_map_widget.dart';
+import '../widgets/highlight_locations_marquee.dart';
 import '../widgets/progress_footer.dart';
 import '../widgets/share_card_dialog.dart';
 import '../widgets/importance_list_modal.dart';
+import 'library_screen.dart';
 import 'profile_screen.dart';
+import 'admin_dashboard_screen.dart';
+import '../services/admin_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -35,8 +39,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             )
           : SafeArea(
-              top: !isLandscape && _isHeaderVisible,
-              bottom: !isLandscape && _isFooterVisible,
+              top: _isHeaderVisible,
+              bottom: _isFooterVisible,
               left: isLandscape,
               right: isLandscape,
               child: Stack(
@@ -46,8 +50,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: TurkeyMapWidget(),
                   ),
 
-                  // PORTRAIT HEADER BAR (Top Overlay)
-                  if (!isLandscape && _isHeaderVisible)
+                  // HEADER BAR (Top Overlay)
+                  if (_isHeaderVisible)
                     Positioned(
                       top: 0,
                       left: 0,
@@ -70,7 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             Builder(
                               builder: (ctx) => IconButton(
                                 icon: const Icon(Icons.menu, color: Colors.white70),
-                                tooltip: 'Yan Çekmece',
+                                tooltip: 'Menü / Çekmece',
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                                 onPressed: () {
@@ -78,8 +82,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 },
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            const Text('🗺️', style: TextStyle(fontSize: 22)),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Column(
@@ -112,23 +114,31 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             _buildUserSelector(context, provider),
-                            IconButton(
-                              icon: const Icon(Icons.share_rounded, color: Color(0xFF38BDF8)),
-                              tooltip: 'Haritamı Paylaş',
-                              onPressed: () {
-                                ShareCardDialog.show(context);
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.person, color: Color(0xFF8B5CF6)),
-                              tooltip: 'Profil',
+                            const SizedBox(width: 6),
+                            // Kütüphane Butonu (Harita dışı şehirler ve lokasyonlar sayfası)
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.local_library_rounded, size: 16),
+                              label: const Text(
+                                'Kütüphane',
+                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF8B5CF6),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
                               onPressed: () {
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                                  MaterialPageRoute(builder: (_) => const LibraryScreen()),
                                 );
                               },
                             ),
+                            const SizedBox(width: 4),
                             IconButton(
                               icon: const Icon(Icons.keyboard_arrow_up, color: Colors.white70),
                               tooltip: 'Üst Barı Gizle',
@@ -141,8 +151,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                  // PORTRAIT HEADER TOGGLE BUTTON (When hidden)
-                  if (!isLandscape && !_isHeaderVisible)
+                  // HEADER TOGGLE BUTTON (When hidden)
+                  if (!_isHeaderVisible)
                     Positioned(
                       top: 12,
                       left: 12,
@@ -156,8 +166,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                  // PORTRAIT FOOTER BAR (Bottom Overlay)
-                  if (!isLandscape && _isFooterVisible)
+                  // MARQUEE (Bottom Overlay: Only locations slider)
+                  if (_isFooterVisible)
                     Positioned(
                       bottom: 0,
                       left: 0,
@@ -171,11 +181,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                 setState(() => _isFooterVisible = false);
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF0D0D1A).withValues(alpha: 0.9),
+                                  color: const Color(0xFF0D0D1A).withValues(alpha: 0.92),
                                   borderRadius:
-                                      const BorderRadius.vertical(top: Radius.circular(12)),
+                                      const BorderRadius.vertical(top: Radius.circular(10)),
                                   border: const Border(
                                     top: BorderSide(color: Colors.white24),
                                     left: BorderSide(color: Colors.white24),
@@ -185,31 +195,32 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 18),
+                                    Icon(Icons.keyboard_arrow_down, color: Colors.white70, size: 16),
                                     SizedBox(width: 4),
-                                    Text('Gizle', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                                    Text('Gizle', style: TextStyle(color: Colors.white70, fontSize: 10.5)),
                                   ],
                                 ),
                               ),
                             ),
                           ),
-                          const ProgressFooter(),
+                          // Only locations marquee bar!
+                          const HighlightLocationsMarquee(),
                         ],
                       ),
                     ),
 
-                  // PORTRAIT FOOTER TOGGLE BUTTON (When hidden)
-                  if (!isLandscape && !_isFooterVisible)
+                  // FOOTER TOGGLE BUTTON (When hidden)
+                  if (!_isFooterVisible)
                     Positioned(
                       bottom: 16,
                       right: 16,
                       child: FloatingActionButton.extended(
                         heroTag: 'show_footer_btn',
-                        backgroundColor: const Color(0xFF10B981),
-                        icon: const Icon(Icons.analytics_outlined, color: Colors.white),
-                        label: Text(
-                          provider.overallPercent,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        icon: const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+                        label: const Text(
+                          'Önemli Lokasyonlar',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                         ),
                         onPressed: () {
                           setState(() => _isFooterVisible = true);
@@ -296,6 +307,64 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildUserSelector(context, provider),
                 ],
               ),
+            ),
+
+            // Kütüphane Menü Öğesi
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              child: ListTile(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                tileColor: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                leading: const Icon(Icons.local_library_rounded, color: Color(0xFFA78BFA)),
+                title: const Text(
+                  'Şehir & Keşif Kütüphanesi',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+                ),
+                subtitle: const Text(
+                  '81 ili ve tüm lokasyonları liste olarak incele',
+                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white38, size: 14),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const LibraryScreen()),
+                  );
+                },
+              ),
+            ),
+
+            // Yönetim Paneli (Sadece Giriş Yapmış Adminler için)
+            FutureBuilder<bool>(
+              future: AdminService().isCurrentUserAdmin(),
+              builder: (ctx, snapshot) {
+                if (snapshot.data == true) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      tileColor: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                      leading: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFEF4444)),
+                      title: const Text(
+                        'Yönetim Paneli (Master Harita)',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+                      ),
+                      subtitle: const Text(
+                        'Varsayılan haritayı ve en iyiler paketlerini düzenle',
+                        style: TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
+                      trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white38, size: 14),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+                        );
+                      },
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
             ),
 
             // Drawer Extra Statistics Section

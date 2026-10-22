@@ -1,9 +1,11 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'providers/city_provider.dart';
 import 'screens/home_screen.dart';
+import 'screens/admin_dashboard_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,6 +58,14 @@ class TurkiyeKesifApp extends StatelessWidget {
     return MaterialApp(
       title: 'Türkiye Keşif Haritası',
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        dragDevices: {
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.touch,
+          PointerDeviceKind.stylus,
+          PointerDeviceKind.trackpad,
+        },
+      ),
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: const ColorScheme.dark(
@@ -66,7 +76,12 @@ class TurkiyeKesifApp extends StatelessWidget {
         fontFamily: 'Roboto',
         scaffoldBackgroundColor: const Color(0xFF0D0D1A),
       ),
-      home: const HomeScreen(),
+      initialRoute: '/',
+      routes: {
+        '/': (_) => const HomeScreen(),
+        '/admin': (_) => const AdminDashboardScreen(),
+        '/yonetim': (_) => const AdminDashboardScreen(),
+      },
     );
   }
 }

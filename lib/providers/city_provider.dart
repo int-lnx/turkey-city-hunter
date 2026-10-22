@@ -8,15 +8,19 @@ import '../models/city_model.dart';
 import '../models/city_group.dart';
 import '../models/city_item.dart';
 import '../data/turkey_cities_data.dart';
+import '../data/best_lists_data.dart';
+import '../services/admin_service.dart';
 
 const _kUsersListKey = 'turkey_users_list_v1';
 const _kActiveUserKey = 'turkey_active_user_v1';
+const _kCustomBestPackagesKey = 'turkey_custom_best_packages_v1';
 const _uuid = Uuid();
 
 class CityProvider extends ChangeNotifier {
   List<String> _users = ['Varsayılan'];
   String _currentUser = 'Varsayılan';
   List<CityModel> _cities = [];
+  List<BestListPackage> _bestPackages = [];
   bool _isLoading = true;
   User? _firebaseUser;
 
@@ -25,6 +29,7 @@ class CityProvider extends ChangeNotifier {
   User? get firebaseUser => _firebaseUser;
   bool get isLoggedIn => _firebaseUser != null;
   List<CityModel> get cities => _cities;
+  List<BestListPackage> get bestPackages => _bestPackages;
   bool get isLoading => _isLoading;
 
   CityProvider() {
@@ -39,9 +44,16 @@ class CityProvider extends ChangeNotifier {
   void _listenAuth() {
     try {
       FirebaseAuth.instance.authStateChanges().listen((user) async {
+        final previousUser = _firebaseUser;
         _firebaseUser = user;
-        // Firebase kullanıcısı bağlandığında mevcut profili koru ve yeniden yükle
-        await _loadUserCities();
+
+        if (user != null) {
+          // Kullanıcı giriş yaptı: Buluttaki profilleri ve harita verilerini cihazla senkronize et
+          await _syncFromFirestoreOnLogin();
+        } else if (previousUser != null) {
+          // Kullanıcı çıkış yaptı: Diğer cihaz/hesap karışmaması için temiz varsayılan duruma sıfırla
+          await _resetToGuestDefaults();
+        }
         notifyListeners();
       }, onError: (e) {
         debugPrint('Auth state change hatası: $e');
@@ -65,6 +77,7 @@ class CityProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kActiveUserKey, _currentUser);
     await _loadUserCities();
+    await _saveToFirebaseOnly();
     notifyListeners();
   }
 
@@ -87,8 +100,12 @@ class CityProvider extends ChangeNotifier {
       final sourceList = await _fetchCitiesForUser(copyFromUser);
       newCities = _cloneCities(sourceList, copyCheckedState: copyCheckedState);
     } else {
-      // Varsayılan sıfırdan harita
-      newCities = buildDefaultCities();
+      // Buluttaki güncel Master (Varsayılan) harita
+      try {
+        newCities = await AdminService().getMasterCities();
+      } catch (_) {
+        newCities = buildDefaultCities();
+      }
     }
 
     // Yeni kullanıcının haritasını kaydet
@@ -126,6 +143,8 @@ class CityProvider extends ChangeNotifier {
                 id: item.id,
                 name: item.name,
                 note: item.note,
+                description: item.description,
+                imageUrl: item.imageUrl,
                 importance: item.importance,
                 isChecked: copyCheckedState ? item.isChecked : false,
                 subItems: item.subItems.map((sub) {
@@ -133,6 +152,8 @@ class CityProvider extends ChangeNotifier {
                     id: sub.id,
                     name: sub.name,
                     note: sub.note,
+                    description: sub.description,
+                    imageUrl: sub.imageUrl,
                     importance: sub.importance,
                     isChecked: copyCheckedState ? sub.isChecked : false,
                   );
@@ -240,6 +261,83 @@ class CityProvider extends ChangeNotifier {
 
     await _saveToFirebaseOnly();
     notifyListeners();
+  }
+
+  // ── Data Export & Import ────────────────────────────────────────────────────
+
+  /// Aktif haritayı JSON metni olarak dışa aktarır.
+  String exportMapData({String? targetUser}) {
+    final userToExport = targetUser ?? _currentUser;
+    final cityList = _cities.isNotEmpty ? _cities : buildDefaultCities();
+    final payload = {
+      'app': 'turkiye_kesif_haritasi',
+      'version': '1.0',
+      'exportedAt': DateTime.now().toIso8601String(),
+      'mapName': userToExport,
+      'cities': cityList.map((c) => c.toJson()).toList(),
+    };
+    return const JsonEncoder.withIndent('  ').convert(payload);
+  }
+
+  /// Dışarıdan gelen JSON verisini her zaman yeni bir harita/profil olarak içe aktarır.
+  /// Var olan herhangi bir haritanın üzerine yazmaz.
+  /// İçe aktarılan yeni profil adını döndürür.
+  Future<String> importMapData(String jsonString, {String? customMapName}) async {
+    final dynamic decoded = jsonDecode(jsonString);
+    List<dynamic>? rawCities;
+    String suggestedName = customMapName?.trim() ?? '';
+
+    if (decoded is Map<String, dynamic>) {
+      if (suggestedName.isEmpty) {
+        suggestedName = (decoded['mapName'] as String?)?.trim() ?? '';
+      }
+      if (decoded['cities'] is List) {
+        rawCities = decoded['cities'] as List<dynamic>;
+      }
+    } else if (decoded is List) {
+      rawCities = decoded;
+    }
+
+    if (rawCities == null || rawCities.isEmpty) {
+      throw const FormatException('Geçersiz veya boş harita verisi.');
+    }
+
+    // Şehirleri çözümle
+    final importedCities = rawCities
+        .map((e) => CityModel.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+
+    if (suggestedName.isEmpty) {
+      suggestedName = 'İçe Aktarılan Harita';
+    }
+
+    // Var olan isimlerle çakışmayı önlemek için benzersiz bir isim üret
+    String finalName = suggestedName;
+    int counter = 1;
+    while (_users.contains(finalName)) {
+      finalName = '$suggestedName ($counter)';
+      counter++;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final rawList = importedCities.map((c) => c.toJson()).toList();
+    await prefs.setString('turkey_cities_user_$finalName', jsonEncode(rawList));
+
+    if (!_users.contains(finalName)) {
+      _users.add(finalName);
+      await prefs.setStringList(_kUsersListKey, _users);
+    }
+
+    // Yeni içe aktarılan haritaya geç
+    _currentUser = finalName;
+    _cities = importedCities;
+    await prefs.setString(_kActiveUserKey, _currentUser);
+
+    // Firebase bağlıysa oraya da kaydet
+    await _saveToFirebaseOnly();
+
+    notifyListeners();
+    return finalName;
   }
 
   // ── Computed Stats ─────────────────────────────────────────────────────────
@@ -393,8 +491,16 @@ class CityProvider extends ChangeNotifier {
     return true;
   }
 
-  void editItemDetails(String cityId, String groupId, String itemId,
-      {required String newName, required String newNote, String? subItemId}) {
+  void editItemDetails(
+    String cityId,
+    String groupId,
+    String itemId, {
+    required String newName,
+    required String newNote,
+    String newDescription = '',
+    String newImageUrl = '',
+    String? subItemId,
+  }) {
     final cityIndex = _cities.indexWhere((c) => c.id == cityId);
     if (cityIndex == -1) return;
 
@@ -413,18 +519,23 @@ class CityProvider extends ChangeNotifier {
         item.subItems[subIndex] = item.subItems[subIndex].copyWith(
           name: newName,
           note: newNote,
+          description: newDescription,
+          imageUrl: newImageUrl,
         );
       }
     } else {
       group.items[itemIndex] = item.copyWith(
         name: newName,
         note: newNote,
+        description: newDescription,
+        imageUrl: newImageUrl,
       );
     }
 
     notifyListeners();
     _save();
   }
+
 
   void updateItemNote(String cityId, String groupId, String itemId, String note,
       {String? subItemId}) {
@@ -614,16 +725,106 @@ class CityProvider extends ChangeNotifier {
     _users = prefs.getStringList(_kUsersListKey) ?? ['Varsayılan'];
     _currentUser = prefs.getString(_kActiveUserKey) ?? _users.first;
     await _loadUserCities();
+    await _loadBestPackages();
     _isLoading = false;
     notifyListeners();
   }
 
-  Future<void> _loadUserCities() async {
-    // 1. SharedPreferences'tan bu profil için yerel veriyi kontrol et
+  /// Kullanıcı giriş yaptığında Firestore'daki tüm profilleri ve aktif haritayı çeker
+  Future<void> _syncFromFirestoreOnLogin() async {
+    if (_firebaseUser == null) return;
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_firebaseUser!.uid)
+          .get();
+
+      final prefs = await SharedPreferences.getInstance();
+
+      if (userDoc.exists && userDoc.data() != null) {
+        final data = userDoc.data()!;
+        final cloudProfiles = (data['profiles'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList();
+        final cloudLastActive = data['lastActiveProfile'] as String?;
+
+        if (cloudProfiles != null && cloudProfiles.isNotEmpty) {
+          _users = cloudProfiles;
+          await prefs.setStringList(_kUsersListKey, _users);
+        }
+
+        if (cloudLastActive != null && cloudLastActive.isNotEmpty) {
+          _currentUser = cloudLastActive;
+          await prefs.setString(_kActiveUserKey, _currentUser);
+        } else if (!_users.contains(_currentUser) && _users.isNotEmpty) {
+          _currentUser = _users.first;
+          await prefs.setString(_kActiveUserKey, _currentUser);
+        }
+      }
+
+      // Aktif haritayı Firestore'dan öncelikli olarak yükle (forceCloud: true)
+      await _loadUserCities(forceCloud: true);
+    } catch (e) {
+      debugPrint('Firestore giriş senkronizasyonu hatası: $e');
+      await _loadUserCities(forceCloud: false);
+    }
+  }
+
+  /// Hesaptan çıkış yapıldığında cihazdaki ekranı ve verileri misafir varsayılanına sıfırlar
+  Future<void> _resetToGuestDefaults() async {
+    final prefs = await SharedPreferences.getInstance();
+    _users = ['Varsayılan'];
+    _currentUser = 'Varsayılan';
+    await prefs.setStringList(_kUsersListKey, _users);
+    await prefs.setString(_kActiveUserKey, _currentUser);
+    await prefs.remove('turkey_cities_user_Varsayılan');
+
+    _cities = buildDefaultCities();
+    final rawList = _cities.map((c) => c.toJson()).toList();
+    await prefs.setString('turkey_cities_user_Varsayılan', jsonEncode(rawList));
+  }
+
+  Future<void> _loadUserCities({bool forceCloud = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final userKey = 'turkey_cities_user_$_currentUser';
-    final raw = prefs.getString(userKey);
 
+    // 1. Eğer kullanıcı giriş yapmışsa veya forceCloud istenmişse Firestore'dan güncel veriyi öncelikli al
+    if (_firebaseUser != null) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_firebaseUser!.uid)
+            .collection('profiles')
+            .doc(_currentUser)
+            .get();
+
+        if (doc.exists && doc.data()?['cities'] != null) {
+          final List<dynamic> list = doc.data()!['cities'];
+          _cities = list
+              .map((e) => CityModel.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList();
+          // Yerel önbelleğe de güncelle
+          await prefs.setString(userKey, jsonEncode(list));
+          return;
+        } else if (!forceCloud) {
+          // Bulutta henüz bu profil yok ama yerelde varsa Firestore'a yedekle
+          final localRaw = prefs.getString(userKey);
+          if (localRaw != null) {
+            final List<dynamic> decoded = jsonDecode(localRaw) as List<dynamic>;
+            _cities = decoded
+                .map((e) => CityModel.fromJson(e as Map<String, dynamic>))
+                .toList();
+            await _saveToFirebaseOnly();
+            return;
+          }
+        }
+      } catch (e) {
+        debugPrint('Firestore profil yükleme hatası: $e');
+      }
+    }
+
+    // 2. SharedPreferences'tan bu profil için yerel veriyi kontrol et
+    final raw = prefs.getString(userKey);
     if (raw != null) {
       try {
         final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
@@ -634,31 +835,12 @@ class CityProvider extends ChangeNotifier {
       } catch (_) {}
     }
 
-    // 2. Eğer yerelde henüz yoksa ve Firebase kullanıcısı varsa Firestore'dan bu profili dene
-    if (_firebaseUser != null) {
-      try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_firebaseUser!.uid)
-            .collection('profiles')
-            .doc(_currentUser)
-            .get();
-        if (doc.exists && doc.data()?['cities'] != null) {
-          final List<dynamic> list = doc.data()!['cities'];
-          _cities = list
-              .map((e) => CityModel.fromJson(Map<String, dynamic>.from(e as Map)))
-              .toList();
-          // Yerel önbelleğe de yaz
-          await prefs.setString(userKey, jsonEncode(list));
-          return;
-        }
-      } catch (e) {
-        debugPrint('Firestore profil yükleme hatası: $e');
-      }
+    // 3. Hiçbiri yoksa buluttaki Master (Varsayılan) Türkiye şehir listesini çek
+    try {
+      _cities = await AdminService().getMasterCities();
+    } catch (_) {
+      _cities = buildDefaultCities();
     }
-
-    // 3. Hiçbiri yoksa varsayılan Türkiye şehir listesi
-    _cities = buildDefaultCities();
     final rawList = _cities.map((c) => c.toJson()).toList();
     await prefs.setString(userKey, jsonEncode(rawList));
   }
@@ -703,5 +885,60 @@ class CityProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Firestore kaydetme hatası: $e');
     }
+  }
+
+  // ── Best List Packages Management ──────────────────────────────────────────
+
+  Future<void> _loadBestPackages() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kCustomBestPackagesKey);
+      if (raw != null) {
+        final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
+        _bestPackages = decoded
+            .map((e) => BestListPackage.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+        return;
+      }
+    } catch (e) {
+      debugPrint('Özel paket yükleme hatası: $e');
+    }
+    // Buluttaki Master varsayılan paketleri yükle
+    try {
+      _bestPackages = await AdminService().getMasterBestPackages();
+    } catch (_) {
+      _bestPackages = List.from(kBestListPackages);
+    }
+  }
+
+  Future<void> _saveBestPackages() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rawList = _bestPackages.map((p) => p.toJson()).toList();
+      await prefs.setString(_kCustomBestPackagesKey, jsonEncode(rawList));
+    } catch (e) {
+      debugPrint('Özel paket kaydetme hatası: $e');
+    }
+  }
+
+  Future<void> addBestPackage(BestListPackage package) async {
+    _bestPackages.add(package);
+    notifyListeners();
+    await _saveBestPackages();
+  }
+
+  Future<void> updateBestPackage(BestListPackage updatedPackage) async {
+    final index = _bestPackages.indexWhere((p) => p.id == updatedPackage.id);
+    if (index != -1) {
+      _bestPackages[index] = updatedPackage;
+      notifyListeners();
+      await _saveBestPackages();
+    }
+  }
+
+  Future<void> deleteBestPackage(String packageId) async {
+    _bestPackages.removeWhere((p) => p.id == packageId);
+    notifyListeners();
+    await _saveBestPackages();
   }
 }

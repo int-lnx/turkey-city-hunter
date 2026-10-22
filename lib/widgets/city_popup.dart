@@ -401,12 +401,19 @@ class _CityPopupState extends State<CityPopup> {
   Widget _buildItemTile(CityItem item, String groupId, CityProvider provider) {
     final bool isChecked = item.effectiveIsChecked;
     final bool hasSubItems = item.subItems.isNotEmpty;
+    final bool hasImage = item.imageUrl.trim().isNotEmpty;
+    final bool hasDesc = item.description.trim().isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InkWell(
-          onTap: () => provider.toggleItem(widget.cityId, groupId, item.id),
+          onTap: () => _showItemDetailDialog(
+            context: context,
+            provider: provider,
+            groupId: groupId,
+            item: item,
+          ),
           onLongPress: () => _showItemOptionsModal(
             context: context,
             provider: provider,
@@ -415,35 +422,66 @@ class _CityPopupState extends State<CityPopup> {
           ),
           borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: isChecked
-                        ? const Color(0xFF8B5CF6)
-                        : (item.checkedCount > 0
-                            ? const Color(0xFF8B5CF6).withValues(alpha: 0.4)
-                            : Colors.transparent),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: isChecked
-                          ? const Color(0xFF8B5CF6)
-                          : Colors.white30,
-                      width: 1.5,
+                // Specific Checkbox: Only clicking this toggles visited status!
+                InkWell(
+                  onTap: () => provider.toggleItem(widget.cityId, groupId, item.id),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: isChecked
+                            ? const Color(0xFF8B5CF6)
+                            : (item.checkedCount > 0
+                                ? const Color(0xFF8B5CF6).withValues(alpha: 0.4)
+                                : Colors.transparent),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isChecked
+                              ? const Color(0xFF8B5CF6)
+                              : Colors.white30,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: isChecked
+                          ? const Icon(Icons.check, color: Colors.white, size: 16)
+                          : (item.checkedCount > 0
+                              ? const Icon(Icons.remove, color: Colors.white, size: 14)
+                              : null),
                     ),
                   ),
-                  child: isChecked
-                      ? const Icon(Icons.check, color: Colors.white, size: 16)
-                      : (item.checkedCount > 0
-                          ? const Icon(Icons.remove, color: Colors.white, size: 14)
-                          : null),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
+                // Optional Thumbnail Image (Only shown if filled)
+                if (hasImage) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      item.imageUrl.trim(),
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, err, stack) => Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.broken_image_outlined, color: Colors.white38, size: 20),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                // Title, Description, Note and Importance Badge
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -460,13 +498,31 @@ class _CityPopupState extends State<CityPopup> {
                           decorationColor: Colors.white38,
                         ),
                       ),
+                      // Description: limited characters/lines so as not to break list aesthetics
+                      if (hasDesc)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            item.description.trim(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.65),
+                              fontSize: 11.5,
+                              height: 1.25,
+                            ),
+                          ),
+                        ),
+                      // Short note/hint
                       if (item.note.trim().isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2, bottom: 2),
                           child: Text(
                             item.note.trim(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.5),
+                              color: const Color(0xFF38BDF8).withValues(alpha: 0.8),
                               fontSize: 11,
                               fontStyle: FontStyle.italic,
                               fontWeight: FontWeight.w300,
@@ -541,7 +597,7 @@ class _CityPopupState extends State<CityPopup> {
             ),
           ),
         ),
-        // Sub-items List sorted: default order is by importance weight (highest first)
+        // Sub-items List sorted
         if (hasSubItems)
           Padding(
             padding: const EdgeInsets.only(left: 32),
@@ -554,7 +610,7 @@ class _CityPopupState extends State<CityPopup> {
                   }
                   final weightComp = b.importance.weight.compareTo(a.importance.weight);
                   if (weightComp != 0) return weightComp;
-                  return 0; // Maintain original relative position
+                  return 0;
                 });
                 return sortedSub
                     .map((sub) =>
@@ -569,9 +625,17 @@ class _CityPopupState extends State<CityPopup> {
 
   Widget _buildSubItemTile(
       CityItem subItem, String groupId, String parentItemId, CityProvider provider) {
+    final bool hasImage = subItem.imageUrl.trim().isNotEmpty;
+    final bool hasDesc = subItem.description.trim().isNotEmpty;
+
     return InkWell(
-      onTap: () =>
-          provider.toggleSubItem(widget.cityId, groupId, parentItemId, subItem.id),
+      onTap: () => _showItemDetailDialog(
+        context: context,
+        provider: provider,
+        groupId: groupId,
+        item: subItem,
+        parentItemId: parentItemId,
+      ),
       onLongPress: () => _showSubItemOptionsModal(
         context: context,
         provider: provider,
@@ -581,34 +645,65 @@ class _CityPopupState extends State<CityPopup> {
       ),
       borderRadius: BorderRadius.circular(6),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             const Icon(Icons.subdirectory_arrow_right,
                 color: Colors.white30, size: 16),
-            const SizedBox(width: 6),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: subItem.isChecked
-                    ? const Color(0xFF06B6D4)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: subItem.isChecked
-                      ? const Color(0xFF06B6D4)
-                      : Colors.white30,
-                  width: 1.2,
+            const SizedBox(width: 4),
+            // Specific Checkbox: Only clicking this marks visited!
+            InkWell(
+              onTap: () => provider.toggleSubItem(
+                  widget.cityId, groupId, parentItemId, subItem.id),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.all(3.0),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: subItem.isChecked
+                        ? const Color(0xFF06B6D4)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: subItem.isChecked
+                          ? const Color(0xFF06B6D4)
+                          : Colors.white30,
+                      width: 1.2,
+                    ),
+                  ),
+                  child: subItem.isChecked
+                      ? const Icon(Icons.check, color: Colors.white, size: 12)
+                      : null,
                 ),
               ),
-              child: subItem.isChecked
-                  ? const Icon(Icons.check, color: Colors.white, size: 12)
-                  : null,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
+            // Optional sub-item image thumbnail
+            if (hasImage) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.network(
+                  subItem.imageUrl.trim(),
+                  width: 36,
+                  height: 36,
+                  fit: BoxFit.cover,
+                  errorBuilder: (ctx, err, stack) => Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(Icons.broken_image_outlined, color: Colors.white38, size: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -624,13 +719,29 @@ class _CityPopupState extends State<CityPopup> {
                       decorationColor: Colors.white38,
                     ),
                   ),
+                  if (hasDesc)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        subItem.description.trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          fontSize: 11,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
                   if (subItem.note.trim().isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2, bottom: 2),
                       child: Text(
                         subItem.note.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color: const Color(0xFF38BDF8).withValues(alpha: 0.8),
                           fontSize: 10.5,
                           fontStyle: FontStyle.italic,
                           fontWeight: FontWeight.w300,
@@ -817,6 +928,8 @@ class _CityPopupState extends State<CityPopup> {
     String itemId,
     String currentName,
     String currentNote,
+    String currentDescription,
+    String currentImageUrl,
     ItemImportance currentImportance,
     CityProvider provider, {
     String? subItemId,
@@ -827,6 +940,8 @@ class _CityPopupState extends State<CityPopup> {
         title: subItemId != null ? 'Alt Maddeyi Düzenle' : 'Maddeyi Düzenle',
         initialName: currentName,
         initialNote: currentNote,
+        initialDescription: currentDescription,
+        initialImageUrl: currentImageUrl,
       ),
     );
     if (result != null && result['name'] != null && result['name']!.trim().isNotEmpty) {
@@ -836,10 +951,13 @@ class _CityPopupState extends State<CityPopup> {
         itemId,
         newName: result['name']!.trim(),
         newNote: result['note'] ?? '',
+        newDescription: result['description'] ?? '',
+        newImageUrl: result['imageUrl'] ?? '',
         subItemId: subItemId,
       );
     }
   }
+
 
   Future<void> _showAddItemDialog(String groupId, CityProvider provider) async {
     final controller = TextEditingController();
@@ -974,13 +1092,34 @@ class _CityPopupState extends State<CityPopup> {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.info_outline_rounded, color: Color(0xFF8B5CF6), size: 20),
+                ),
+                title: const Text('Detayları Görüntüle', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                subtitle: const Text('Görseli ve tam açıklamayı incele', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showItemDetailDialog(
+                    context: context,
+                    provider: provider,
+                    groupId: groupId,
+                    item: item,
+                  );
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
                     color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.edit_outlined, color: Color(0xFF38BDF8), size: 20),
                 ),
-                title: const Text('Düzenle (Ad & Not)', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-                subtitle: const Text('Madde adını veya detay notunu güncelle', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                title: const Text('Düzenle (Ad, Not, Görsel, Açıklama)', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                subtitle: const Text('Madde adı, fotoğrafı veya detaylı açıklamasını güncelle', style: TextStyle(color: Colors.white38, fontSize: 11)),
                 onTap: () {
                   Navigator.pop(ctx);
                   _showEditItemDialog(
@@ -988,6 +1127,8 @@ class _CityPopupState extends State<CityPopup> {
                     item.id,
                     item.name,
                     item.note,
+                    item.description,
+                    item.imageUrl,
                     item.importance,
                     provider,
                   );
@@ -1067,13 +1208,35 @@ class _CityPopupState extends State<CityPopup> {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.info_outline_rounded, color: Color(0xFF8B5CF6), size: 20),
+                ),
+                title: const Text('Detayları Görüntüle', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                subtitle: const Text('Görseli ve tam açıklamayı incele', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showItemDetailDialog(
+                    context: context,
+                    provider: provider,
+                    groupId: groupId,
+                    item: subItem,
+                    parentItemId: parentItemId,
+                  );
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
                     color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.edit_outlined, color: Color(0xFF38BDF8), size: 20),
                 ),
-                title: const Text('Düzenle (Ad & Not)', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-                subtitle: const Text('Alt madde adını veya detay notunu güncelle', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                title: const Text('Düzenle (Ad, Not, Görsel, Açıklama)', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+                subtitle: const Text('Alt madde adı, fotoğrafı veya açıklamasını güncelle', style: TextStyle(color: Colors.white38, fontSize: 11)),
                 onTap: () {
                   Navigator.pop(ctx);
                   _showEditItemDialog(
@@ -1081,6 +1244,8 @@ class _CityPopupState extends State<CityPopup> {
                     parentItemId,
                     subItem.name,
                     subItem.note,
+                    subItem.description,
+                    subItem.imageUrl,
                     subItem.importance,
                     provider,
                     subItemId: subItem.id,
@@ -1108,6 +1273,300 @@ class _CityPopupState extends State<CityPopup> {
                     subItem.name,
                   );
                 },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showItemDetailDialog({
+    required BuildContext context,
+    required CityProvider provider,
+    required String groupId,
+    required CityItem item,
+    String? parentItemId,
+  }) async {
+    final bool hasImage = item.imageUrl.trim().isNotEmpty;
+    final bool hasDesc = item.description.trim().isNotEmpty;
+    final bool hasNote = item.note.trim().isNotEmpty;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF16162D),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        contentPadding: EdgeInsets.zero,
+        content: Container(
+          width: 480,
+          constraints: const BoxConstraints(maxHeight: 580),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Top Image if provided
+              if (hasImage)
+                Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                      child: Image.network(
+                        item.imageUrl.trim(),
+                        height: 200,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          height: 140,
+                          color: const Color(0xFF1E293B),
+                          alignment: Alignment.center,
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.broken_image_outlined, color: Colors.white38, size: 36),
+                              SizedBox(height: 6),
+                              Text('Görsel yüklenemedi', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: CircleAvatar(
+                        backgroundColor: Colors.black54,
+                        radius: 16,
+                        child: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white, size: 16),
+                          padding: EdgeInsets.zero,
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 10, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+              // Body Details
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Title and Visited Badge
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 19,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: item.effectiveIsChecked
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                                  : Colors.white10,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: item.effectiveIsChecked
+                                    ? const Color(0xFF10B981).withValues(alpha: 0.6)
+                                    : Colors.white24,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  item.effectiveIsChecked ? Icons.check_circle : Icons.circle_outlined,
+                                  color: item.effectiveIsChecked ? const Color(0xFF10B981) : Colors.white38,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  item.effectiveIsChecked ? 'Gidildi' : 'Gidilmedi',
+                                  style: TextStyle(
+                                    color: item.effectiveIsChecked ? const Color(0xFF10B981) : Colors.white60,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Importance badge row
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Color(item.importance.colorValue).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: Color(item.importance.colorValue).withValues(alpha: 0.5),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              'Önem: ${item.importance.label} (${item.importance.weight}x)',
+                              style: TextStyle(
+                                color: Color(item.importance.colorValue),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Note section (if present)
+                      if (hasNote) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF38BDF8).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.lightbulb_outline_rounded, color: Color(0xFF38BDF8), size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  item.note.trim(),
+                                  style: const TextStyle(
+                                    color: Color(0xFFBAE6FD),
+                                    fontSize: 12.5,
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      // Description section
+                      if (hasDesc) ...[
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Hakkında / Detaylar',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          item.description.trim(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13.5,
+                            height: 1.45,
+                          ),
+                        ),
+                      ] else if (!hasImage && !hasNote) ...[
+                        const SizedBox(height: 20),
+                        Center(
+                          child: Text(
+                            'Bu madde için henüz detaylı bir görsel veya açıklama eklenmemiş.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.4),
+                              fontSize: 12.5,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              // Footer Actions
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: Colors.white10)),
+                ),
+                child: Row(
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('Düzenle'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF38BDF8),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        if (parentItemId != null) {
+                          _showEditItemDialog(
+                            groupId,
+                            parentItemId,
+                            item.name,
+                            item.note,
+                            item.description,
+                            item.imageUrl,
+                            item.importance,
+                            provider,
+                            subItemId: item.id,
+                          );
+                        } else {
+                          _showEditItemDialog(
+                            groupId,
+                            item.id,
+                            item.name,
+                            item.note,
+                            item.description,
+                            item.imageUrl,
+                            item.importance,
+                            provider,
+                          );
+                        }
+                      },
+                    ),
+                    const Spacer(),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text('Kapat', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -1197,16 +1656,20 @@ class _InputDialog extends StatelessWidget {
   }
 }
 
-/// Item edit dialog supporting Name and Detail/Note
+/// Item edit dialog supporting Name, Detail/Note, Description and Image URL
 class _EditItemDetailsDialog extends StatefulWidget {
   final String title;
   final String initialName;
   final String initialNote;
+  final String initialDescription;
+  final String initialImageUrl;
 
   const _EditItemDetailsDialog({
     required this.title,
     required this.initialName,
     required this.initialNote,
+    this.initialDescription = '',
+    this.initialImageUrl = '',
   });
 
   @override
@@ -1216,18 +1679,24 @@ class _EditItemDetailsDialog extends StatefulWidget {
 class _EditItemDetailsDialogState extends State<_EditItemDetailsDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _noteController;
+  late final TextEditingController _descriptionController;
+  late final TextEditingController _imageUrlController;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.initialName);
     _noteController = TextEditingController(text: widget.initialNote);
+    _descriptionController = TextEditingController(text: widget.initialDescription);
+    _imageUrlController = TextEditingController(text: widget.initialImageUrl);
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _noteController.dispose();
+    _descriptionController.dispose();
+    _imageUrlController.dispose();
     super.dispose();
   }
 
@@ -1240,56 +1709,104 @@ class _EditItemDetailsDialogState extends State<_EditItemDetailsDialog> {
         widget.title,
         style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
       ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Madde Adı',
-              style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _nameController,
-              autofocus: true,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Yer veya mekan adı...',
-                hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
-                filled: true,
-                fillColor: Colors.white10,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
+      content: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Madde Adı *',
+                style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _nameController,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Yer veya mekan adı...',
+                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                  filled: true,
+                  fillColor: Colors.white10,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Detay / Açıklama (İnce Not)',
-              style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _noteController,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              maxLines: 3,
-              minLines: 2,
-              decoration: InputDecoration(
-                hintText: 'Örn: Gün batımında çok güzel, müze kart geçiyor...',
-                hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
-                filled: true,
-                fillColor: Colors.white10,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
+              const SizedBox(height: 14),
+              const Text(
+                'Görsel URL Adresi (Opsiyonel)',
+                style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _imageUrlController,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'https://example.com/fotograf.jpg',
+                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                  filled: true,
+                  fillColor: Colors.white10,
+                  prefixIcon: const Icon(Icons.image_outlined, color: Color(0xFF38BDF8), size: 18),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 14),
+              const Text(
+                'Detaylı Açıklama (Pop-up’ta okunabilir)',
+                style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _descriptionController,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                maxLines: 4,
+                minLines: 2,
+                decoration: InputDecoration(
+                  hintText: 'Tarihi, önemi, hakkında bilinenler...',
+                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                  filled: true,
+                  fillColor: Colors.white10,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Kısa Not / İpucu (İnce Not)',
+                style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _noteController,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                maxLines: 2,
+                minLines: 1,
+                decoration: InputDecoration(
+                  hintText: 'Örn: Gün batımında çok güzel, müze kart geçiyor...',
+                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                  filled: true,
+                  fillColor: Colors.white10,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -1302,6 +1819,8 @@ class _EditItemDetailsDialogState extends State<_EditItemDetailsDialog> {
             Navigator.pop(context, {
               'name': _nameController.text.trim(),
               'note': _noteController.text.trim(),
+              'description': _descriptionController.text.trim(),
+              'imageUrl': _imageUrlController.text.trim(),
             });
           },
           style: ElevatedButton.styleFrom(
@@ -1315,3 +1834,4 @@ class _EditItemDetailsDialogState extends State<_EditItemDetailsDialog> {
     );
   }
 }
+
